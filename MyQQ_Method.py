@@ -151,7 +151,8 @@ def apiSendMsg(myThread):
     try:
         myThread.recMsg = strQ2B(myThread.recMsg)
         fromQQName = getFriendsRemark(myThread)
-        if (myThread.recFromQQ == '3194775246' or myThread.recFromQQ == '1684064833') and myThread.recMsg[0] == '\\':
+        # 管理员QQ
+        if (myThread.recFromQQ == ' ' or myThread.recFromQQ == ' ，') and myThread.recMsg[0] == '\\':
             systemSetting(myThread)
         elif myThread.recType == 1:
             msg = myThread.name + '：[' + messageType[str(myThread.recType)] + '] ' + fromQQName + '(' + myThread.recID + ')：' + myThread.recMsg

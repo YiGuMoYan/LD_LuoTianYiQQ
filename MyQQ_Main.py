@@ -10,8 +10,10 @@ url = 'http://127.0.0.1'
 callPort = 9999
 port = '10002'
 apiUrl = 'http://localhost:10002/MyQQHTTPAPI?'
-TTSUrl = 'https://azure.5ixf.cc/Synth.php?'
-TianXingKey = '1a2af8231600d05260f257c002c49779'
+# vocaltts api
+TTSUrl = ' '
+# TianXing机器人 key
+TianXingKey = ' '
 RobotQQ = ''
 
 # myQQ目录
