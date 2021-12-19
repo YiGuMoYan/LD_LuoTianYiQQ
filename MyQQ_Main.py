@@ -1,3 +1,10 @@
+'''
+    Name:       LD_LuoTianYiQQ
+    Function:   基于MyQQ + Vocaltts 的同人ai天依
+    Author:     忆古陌烟(3194775246)
+    Support:    0疯_子0(1209711408)
+    PS:         该文件并非clone后就可以使用，请自行获取 Vocaltts api 与 天行机器人key， 填写管理员账号
+'''
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import json
 import random
@@ -10,10 +17,14 @@ url = 'http://127.0.0.1'
 callPort = 9999
 port = '10002'
 apiUrl = 'http://localhost:10002/MyQQHTTPAPI?'
-# vocaltts api
-TTSUrl = ' '
-# TianXing机器人 key
-TianXingKey = ' '
+
+# Vocaltts api 
+TTSUrl = ''
+
+# TianXing机器人key
+TianXingKey = ''
+
+# 机器人QQ账号
 RobotQQ = ''
 
 # myQQ目录
@@ -38,17 +49,19 @@ class DaenQQ(BaseHTTPRequestHandler):
             MQ_msgData	UDP收到的原始信息，特殊情况下会返回JSON结构（入群事件时，这里为该事件data）
             MQ_timestamp	对方发送该消息的时间戳，引用回复消息时需要用到
         '''
-        # print(raw_rev_data)
         raw_rev_data_temp = json.loads(raw_rev_data)
         recType = raw_rev_data_temp['MQ_type']
+        recID = raw_rev_data_temp['MQ_fromID']
         recMsg = parse.unquote(raw_rev_data_temp['MQ_msg'])
-        # if not(recType == 2 and not (LD_QQ_Method.judgeAt(recMsg))):
-        if not(recType == 2 and not (MyQQ_Method.judgeAt(recMsg))):
+        # print(raw_rev_data_temp)
+        if not (recType == 2 and not MyQQ_Method.judgeAt(recMsg)):
             threadName = str(random.randint(100, 10000))
-            # thread = LD_QQ_Method.myThread(threadName, raw_rev_data)
             thread = MyQQ_Method.myThread(threadName, raw_rev_data)
             thread.start()
-      
+        elif recType == 2 and MyQQ_Method.Crux_judgeExist(recMsg):
+            thread = MyQQ_Method.cruxThread(RobotQQ, recID, recMsg)
+            thread.start()
+
 # 程序执行入口
 if __name__ == '__main__':
     setting = open('setting.txt', 'r+')
@@ -57,10 +70,8 @@ if __name__ == '__main__':
     myQQUrl = settings[1].strip()
     print('RobotQQ：' + RobotQQ)
     print('myQQUrl：' + myQQUrl)
-    # timeThread = LD_QQ_Method.timeThread(RobotQQ, True)
     timeThread = MyQQ_Method.timeThread(RobotQQ, True)
     timeThread.start()
-    # LD_QQ_Method.myRobot(apiUrl, TTSUrl, TianXingKey, myQQUrl, RobotQQ)
     MyQQ_Method.myRobot(apiUrl, TTSUrl, TianXingKey, myQQUrl, RobotQQ)
     # 第一参数为回调地址，第二参数为回调接口
     host = ('localhost', callPort)

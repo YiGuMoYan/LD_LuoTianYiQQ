@@ -1,3 +1,10 @@
+'''
+    Name:       LD_LuoTianYiQQ
+    Function:   基于MyQQ + Vocaltts 的同人ai天依
+    Author:     忆古陌烟(3194775246)
+    Support:    0疯_子0(1209711408)
+    PS:         该文件并非clone后就可以使用，请自行获取 Vocaltts api 与 天行机器人key， 填写管理员账号
+'''
 import requests
 from urllib import parse
 import base64
@@ -11,7 +18,6 @@ import time
 import datetime
 import fnmatch
 
-
 apiUrl = 'http://localhost:10002/MyQQHTTPAPI?'
 TTSUrl = ''
 TianXingKey = ''
@@ -21,6 +27,7 @@ addAMRUrl = ''
 imageUrl = ''
 originUrl = ''
 ttsVoiceUrl = ''
+cruxUrl = ''
 RobotQQ = ''
 robotQQ = ''
  
@@ -32,9 +39,8 @@ messageType = {
     '2003'  : '被邀请加入群聊',
     '80004' : '机器人发出消息'
 }
-color = ['\033[31m', '\033[32m', '\033[33m', '\033[34m', '\033[35m', '\033[36m', '\033[37m']
 quitGroupList = []
-systemMenu = '管理员菜单：\n\\线程数目（检测当前线程，测试压力）\n\\检测管理（逐一检测群聊管理，退出非管理群聊）\n\\更新歌单（添加MP3格式文件后执行更新歌单）\n\\更新图片（添加图片后执行，图片名称即为匹配的关键字，格式为*jpg）\n\\自定义好友欢迎消息-\n\\自定义群聊欢迎消息-\n\\自定义群聊退出消息-\n\n含有-即为带参指令，-后填写参数\n例如：\\自定义好友欢迎消息-你好，我是天依'
+systemMenu = '管理员菜单：\n\\线程数目（检测当前线程，测试压力）\n\\检测管理（逐一检测群聊管理，退出非管理群聊）\n\\更新歌单（添加MP3格式文件后执行更新歌单）\n\\更新图片（添加图片后执行，图片名称即为匹配的关键字，格式为*jpg）\n\\更新关键词（添加图片后执行，图片名称即为匹配的关键字，格式为*jpg）\n\\自定义好友欢迎消息-\n\\自定义群聊欢迎消息-\n\\自定义群聊退出消息-\n\\自定义加群欢迎消息-\n\n含有-即为带参指令，-后填写参数\n例如：\\自定义好友欢迎消息-你好，我是天依'
 
 # 机器人基础属性
 class myRobot():
@@ -48,6 +54,7 @@ class myRobot():
         global originUrl
         global ttsVoiceUrl
         global RobotQQ
+        global cruxUrl
         apiUrl = myApiUrl
         TTSUrl = myTTSUrl
         TianXingKey = myTianXingKey
@@ -56,36 +63,13 @@ class myRobot():
         originUrl = mymyQQurl + 'Voice/Origin/'
         imageUrl = mymyQQurl + 'Image/'
         ttsVoiceUrl = mymyQQurl + 'Voice/'
+        cruxUrl = mymyQQurl + 'crux/'
         RobotQQ = myRobotQQ
-
-# 初始化音频
-def originAudio(fileName, auidoMessage):
-    TTSDosynth = requests.get(TTSUrl + 'text=' + auidoMessage).json()
-    code64 = TTSDosynth['data']
-    code = base64.b64decode(code64)
-    route = originUrl + fileName + '.mp3'
-    tts = open(route, 'wb')
-    tts.write(code)
-    tts.close()
-    routeMp3 = originUrl + fileName + '.mp3'
-    routeAmr = originUrl + fileName + '.amr'
-    AMRData = {
-            'function'  : 'Api_Mp3ToAmr',
-            'token'     : '666',
-            'params'    : {
-                'c1'        : routeMp3,
-                'c2'        : routeAmr
-            } 
-        }
-    requests.post(apiUrl, json=AMRData)
-    os.remove(routeMp3)
-    return
 
 # 创建消息线程
 class myThread(threading.Thread):
     def __init__(self, myname, my_raw_rev_data):
         threading.Thread.__init__(self)
-        # self.myThread.name = myThread.name
         self.name = myname
         self.raw_rev_data_original = my_raw_rev_data
         self.raw_rev_data = my_raw_rev_data
@@ -95,6 +79,7 @@ class myThread(threading.Thread):
         self.recFromQQ = ''
         self.recMsg = ''
         self.image = ''
+        self.passiveQQ = ''
         style='color(' + str(random.randint(0, 255)) + ')'
         self.console = Console(style=style)
     def run(self):
@@ -107,6 +92,7 @@ class myThread(threading.Thread):
         self.recID = raw_rev_data['MQ_fromID']
         self.recFromQQ = raw_rev_data['MQ_fromQQ']
         self.recMsgData = raw_rev_data['MQ_msgData']
+        self.passiveQQ = raw_rev_data['MQ_passiveQQ']
         self.recMsg = parse.unquote(raw_rev_data['MQ_msg'])
         # self.console.print(raw_rev_data)
         # 触发条件后根据实际情况处理调用情况
@@ -116,6 +102,8 @@ class myThread(threading.Thread):
             agreeFriendEvent(self)
         elif self.recType == 2003:
             respondAddGroup(self)
+        elif self.recType == 20021 or self.recType == 2005:
+            respondAddGroupWelcom(self)
         msg = self.name + "：退出线程" 
         self.console.print (msg)
 
@@ -146,13 +134,144 @@ class timeThread(threading.Thread):
         else:
             groupList(self)
 
+# 创建关键词回复线程
+class cruxThread(threading.Thread):
+    def __init__(self,recRobotQQ, recID, recMsg):
+        threading.Thread.__init__(self)
+        self.ID = recID
+        self.msg = recMsg
+        self.crux = ''
+        self.QQ = recRobotQQ
+    def run(self):
+        Crux_Main(self)
+
+# 获取关键词  
+def Crux_getList():
+    cruxList = []
+    cruxTXT = open(cruxUrl + 'Crux.txt', 'r+')
+    allcrux = cruxTXT.readlines()
+    for i in allcrux:
+        i = i.strip('\n')
+        cruxList.append(i)
+    cruxTXT.close()
+    return cruxList
+
+# 判断关键词
+def Crux_judge(recMsg):
+    cruxList = Crux_getList()
+    for i in cruxList:
+        if i in recMsg:
+            return i
+    return -1
+
+# 判断是否存在关键词
+def Crux_judgeExist(recMsg):
+    cruxList = Crux_getList()
+    for i in cruxList:
+        if i in recMsg:
+            return True
+    return False
+
+# 关键词主程序
+def Crux_Main(cruxThread):
+    cruxThread.crux = Crux_judge(cruxThread.msg)
+    if not cruxThread.crux == -1:
+        Crux_judgeDim(cruxThread)
+        Crux_send(cruxThread)
+
+# 关键词获取随机文件夹名称
+def Crux_getDim():
+    dir = os.listdir(cruxUrl)
+    dirList = []
+    for i in dir:
+        if os.path.isdir(cruxUrl + i):
+            dirList.append(i)
+    return dirList
+
+# 重新判断关键词
+def Crux_judgeDim(cruxThread):
+    dimList = Crux_getDim()
+    if cruxThread.crux in dimList:
+        dir = os.listdir(cruxUrl + cruxThread.crux + '/')
+        cruxNum = len(dir)
+        cruxThread.crux = cruxThread.crux + '/(' + str(random.randint(0, cruxNum - 1)) + ')'
+    return
+
+# 发送关键词图片
+def Crux_send(cruxThread):
+    cruxRoute = cruxUrl + cruxThread.crux + '.jpg'
+    upLoadPicData = {
+        'function'  : 'Api_UpLoadPic',
+        'token'     : '666',
+        'params'    : {
+            'c1'    : cruxThread.QQ,
+            'c2'    : 2,
+            'c3'    : cruxThread.ID,
+            'c4'    : cruxRoute
+        }
+    }
+    cruxGUIDrec = requests.post(apiUrl, json=upLoadPicData).json()
+    cruxGUIDData = cruxGUIDrec['data']
+    cruxGUID = cruxGUIDData['ret']
+    sendMsg_Group_QQ(cruxThread.QQ, cruxThread.ID, cruxGUID)
+
+# 重写Crux.txt文件
+def Crux_addImageTXT(cruxList):
+    cruxTXT = open(cruxUrl + 'Crux.txt', 'w+')
+    allName = ''
+    for i in cruxList:
+        allName = allName + i + '\n'
+    cruxTXT.write(allName)
+    cruxTXT.close()
+
+# 更新Image
+def Crux_update(myThread):
+    sendMsg_friend(myThread, myThread.recFromQQ, '开始更新Image关键词')
+    cruxName = Image_readImageName(cruxUrl, '*jpg')
+    cruxNameList = []
+    # 借用Music除去Image扩展名
+    for i in cruxName:
+        i = Music_getMusicName(i)
+        cruxNameList.append(i)
+    # 将模糊搜索的文件夹写入txt
+    dim = Crux_getDim()
+    cruxNameList.extend(dim)
+    Crux_addImageTXT(cruxNameList)
+    msg = 'Image关键词更新完毕\n当下列表：\n'
+    for i in cruxNameList:
+        msg = msg + i + '\n'
+    sendMsg_friend(myThread, myThread.recFromQQ, msg)
+
+# 初始化音频
+def originAudio(fileName, auidoMessage):
+    TTSDosynth = requests.get(TTSUrl + 'text=' + auidoMessage).json()
+    code64 = TTSDosynth['data']
+    code = base64.b64decode(code64)
+    route = originUrl + fileName + '.mp3'
+    tts = open(route, 'wb')
+    tts.write(code)
+    tts.close()
+    routeMp3 = originUrl + fileName + '.mp3'
+    routeAmr = originUrl + fileName + '.amr'
+    AMRData = {
+            'function'  : 'Api_Mp3ToAmr',
+            'token'     : '666',
+            'params'    : {
+                'c1'        : routeMp3,
+                'c2'        : routeAmr
+            } 
+        }
+    requests.post(apiUrl, json=AMRData)
+    os.remove(routeMp3)
+    return
+
 # api消息回应
 def apiSendMsg(myThread):
     try:
         myThread.recMsg = strQ2B(myThread.recMsg)
         fromQQName = getFriendsRemark(myThread)
-        # 管理员QQ
-        if (myThread.recFromQQ == ' ' or myThread.recFromQQ == ' ，') and myThread.recMsg[0] == '\\':
+        # 存放管理员QQ
+        if (myThread.recFromQQ == '' or myThread.recFromQQ == '') and myThread.recMsg[0] == '\\':
             systemSetting(myThread)
         elif myThread.recType == 1:
             msg = myThread.name + '：[' + messageType[str(myThread.recType)] + '] ' + fromQQName + '(' + myThread.recID + ')：' + myThread.recMsg
@@ -206,12 +325,16 @@ def systemSetting(myThread):
         Music_Mp3toAMRMain(myThread)
     elif myThread.recMsg == '更新图片':
         Image_Main(myThread)
+    elif myThread.recMsg == '更新关键词':
+        Crux_update(myThread)
     elif myThread.recMsg[0 : 10] == '自定义好友欢迎消息-':
         custom_welcomFriend(myThread)
     elif myThread.recMsg[0 : 10] == '自定义群聊欢迎消息-':
         custom_addGroup(myThread)
     elif myThread.recMsg[0 : 10] == '自定义群聊退出消息-':
         custom_quitGroup(myThread)
+    elif myThread.recMsg[0 : 10] == '自定义加群欢迎消息-':
+        custom_setAddGroupWelcom(myThread)
     
 # 自定义欢迎消息（好友）
 def custom_welcomFriend(myThread):
@@ -595,23 +718,24 @@ def agreeGroupEvent(myThread):
 
 # 获取群列表
 def groupList(timeThread):
-    getGroupListData = {
-        'function'  : 'Api_GetGroupList',
-        'token'     : '666',
-        'params'    : {
-            'c1'        : timeThread.robotQQ,
-        }
-    }
-    recGroupList = requests.post(apiUrl, json=getGroupListData).json()
-    recGroupListData = recGroupList['data']
-    recGroupListRet = recGroupListData['ret']
-    recGroupListData = recGroupListRet['data']
-    recGroupListGroup = recGroupListData['group']
-    for i in recGroupListGroup:
-        qq = i['groupcode']
-        timeThread.robotGroup = qq
-        if not(judgeAdmin(timeThread)):
-            quitGroupEvent(timeThread)
+    # getGroupListData = {
+    #     'function'  : 'Api_GetGroupList',
+    #     'token'     : '666',
+    #     'params'    : {
+    #         'c1'        : timeThread.robotQQ,
+    #     }
+    # }
+    # recGroupList = requests.post(apiUrl, json=getGroupListData).json()
+    # recGroupListData = recGroupList['data']
+    # recGroupListRet = recGroupListData['ret']
+    # recGroupListData = recGroupListRet['data']
+    # recGroupListGroup = recGroupListData['group']
+    # for i in recGroupListGroup:
+    #     qq = i['groupcode']
+    #     timeThread.robotGroup = qq
+    #     if not(judgeAdmin(timeThread)):
+    #         quitGroupEvent(timeThread)
+    pass
        
 # 判断是否是管理
 def judgeAdmin(timeThread):
@@ -911,7 +1035,6 @@ def Image_getDim():
     for i in dir:
         if os.path.isdir(imageUrl + i):
             dirList.append(i)
-    print (dirList)
     return dirList
 
 # 重新判断Image图片
@@ -922,3 +1045,25 @@ def Image_judgeDim(myThread):
         imageNum = len(dir)
         myThread.image = myThread.image + '/(' + str(random.randint(0, imageNum - 1)) + ')'
     return
+
+# 获取欢迎消息
+def custom_getAddGroupWelcom():
+    groupWelcom = open(originUrl + 'groupWelcom.txt', 'r+')
+    msg = groupWelcom.read()
+    return msg
+
+# 更新欢迎消息
+def custom_setAddGroupWelcom(myThread):
+    sendMsg_friend(myThread, myThread.recFromQQ, '正在进行群聊欢迎信息自定义')
+    groupWelcomLen = len(myThread.recMsg)
+    groupWelcomMsg = myThread.recMsg[10 : groupWelcomLen]
+    groupWelcom = open(originUrl + 'groupWelcom.txt', 'w+')
+    groupWelcom.write(groupWelcomMsg)
+    groupWelcom.close()
+    msg = '群聊欢迎信息自定义成功\n当前为：\n' + groupWelcomMsg
+    sendMsg_friend(myThread, myThread.recFromQQ, msg)
+
+# 加群发送欢迎消息
+def respondAddGroupWelcom(myThread):
+    msg = '[@' + myThread.passiveQQ + '] ' + custom_getAddGroupWelcom()
+    sendMsg_Group(myThread, str(myThread.recID), msg)
